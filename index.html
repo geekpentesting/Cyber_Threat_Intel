@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UAE Oil & Gas Sector - Cyber Threat Intelligence Dashboard</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #0a192f;
+            color: #e6f1ff;
+        }
+        
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: auto auto;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 20px;
+            background-color: #172a45;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .map-container {
+            grid-column: 1 / -1;
+            height: 500px;
+            background-color: #172a45;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        #map {
+            height: 100%;
+            border-radius: 4px;
+        }
+        
+        .chart-container {
+            background-color: #172a45;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .table-container {
+            background-color: #172a45;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #0a192f;
+        }
+        
+        th {
+            background-color: #0a192f;
+            color: #64ffda;
+        }
+        
+        tr:hover {
+            background-color: #1d3b5e;
+        }
+        
+        .attack-marker {
+            border-radius: 50%;
+            width: 10px;
+            height: 10px;
+            background-color: red;
+            opacity: 0.8;
+        }
+        
+        .attack-pulse {
+            border-radius: 50%;
+            height: 14px;
+            width: 14px;
+            position: absolute;
+            left: -7px;
+            top: -7px;
+            z-index: 2;
+            opacity: 0;
+            background: rgba(255, 0, 0, 0.5);
+            animation: pulse 2s ease-out infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(0.1);
+                opacity: 0;
+            }
+            50% {
+                opacity: 0.7;
+            }
+            100% {
+                transform: scale(3);
+                opacity: 0;
+            }
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-high, .status-critical {
+            background-color: #ff4d4d;
+        }
+        
+        .status-medium {
+            background-color: #ffa64d;
+        }
+        
+        .status-low {
+            background-color: #4dff4d;
+        }
+        
+        h1, h2, h3 {
+            color: #64ffda;
+        }
+        
+        .last-updated {
+            font-size: 0.8em;
+            color: #8892b0;
+            text-align: right;
+            margin-top: 5px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #8892b0;
+        }
+        
+        .error-message {
+            color: #ff4d4d;
+            padding: 10px;
+            text-align: center;
+            background-color: rgba(255, 77, 77, 0.1);
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .api-status {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.8em;
+        }
+        
+        .api-status span {
+            padding: 2px 6px;
+            border-radius: 4px;
+            background-color: #0a192f;
+        }
+        
+        .refresh-button {
+            background-color: #172a45;
+            border: 1px solid #64ffda;
+            color: #64ffda;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.8em;
+            transition: all 0.3s ease;
+        }
+        
+        .refresh-button:hover {
+            background-color: #1d3b5e;
+        }
+        
+        .refresh-icon {
+            width: 14px;
+            height: 14px;
+        }
+        
+        .loading-spinner {
+            border: 3px solid rgba(100, 255, 218, 0.1);
+            border-radius: 50%;
+            border-top: 3px solid #64ffda;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .export-button {
+            background-color: #172a45;
+            border: 1px solid #64ffda;
+            color: #64ffda;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.3s ease;
+        }
+        
+        .export-button:hover {
+            background-color: #1d3b5e;
+        }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-container, .table-container {
+                grid-column: 1 / -1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>UAE Oil & Gas Sector - Cyber Threat Intelligence Dashboard</h1>
+            <p>Real-time monitoring of cyber threats targeting critical infrastructure</p>
+        </div>
+        
+        <div class="map-container">
+            <div class="controls">
+                <h2>Global Attack Map</h2>
+                <button onclick="updateAttackMap()" class="refresh-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="refresh-icon"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                    Refresh
+                </button>
+            </div>
+            <div class="api-status">
+                <span>Data Source: AbuseIPDB + GreyNoise</span>
+                <span id="map-api-status">Loading...</span>
+            </div>
+            <div id="map"></div>
+            <div class="last-updated">Last updated: <span id="map-timestamp">Loading...</span></div>
+        </div>
+        
+        <div class="chart-container">
+            <div class="controls">
+                <h2>Top 10 Attack Types</h2>
+                <button onclick="updateAttackChart()" class="refresh-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="refresh-icon"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                    Refresh
+                </button>
+            </div>
+            <div class="api-status">
+                <span>Data Source: AlienVault OTX</span>
+                <span id="chart-api-status">Loading...</span>
+            </div>
+            <canvas id="attackChart"></canvas>
+            <div class="last-updated">Last updated: <span id="chart-timestamp">Loading...</span></div>
+        </div>
+        
+        <div class="table-container">
+            <div class="controls">
+                <h2>Recent Critical CVEs</h2>
+                <div>
+                    <button onclick="updateCVETable()" class="refresh-button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="refresh-icon"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                        Refresh
+                    </button>
+                    <button onclick="exportTableToCSV('cve-table', 'cve-data.csv')" class="export-button">Export CSV</button>
+                </div>
+            </div>
+            <div class="api-status">
+                <span>Data Source: NIST NVD API</span>
+                <span id="cve-api-status">Loading...</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>CVE ID</th>
+                        <th>Severity</th>
+                        <th>Affected System</th>
+                        <th>Description</th>
+                        <th>Published Date</th>
+                    </tr>
+                </thead>
+                <tbody id="cve-table">
+                    <tr>
+                        <td colspan="5" class="loading">Loading CVE data...</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="last-updated">Last updated: <span id="cve-timestamp">Loading...</span></div>
+        </div>
+        
+        <div class="table-container">
+            <div class="controls">
+                <h2>Malware IOCs</h2>
+                <div>
+                    <button onclick="updateIOCTable()" class="refresh-button">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="refresh-icon"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                        Refresh
+                    </button>
+                    <button onclick="exportTableToCSV('ioc-table', 'ioc-data.csv')" class="export-button">Export CSV</button>
+                </div>
+            </div>
+            <div class="api-status">
+                <span>Data Source: AlienVault OTX</span>
+                <span id="ioc-api-status">Loading...</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Indicator Type</th>
+                        <th>Value</th>
+                        <th>Malware Family</th>
+                        <th>First Seen</th>
+                        <th>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody id="ioc-table">
+                    <tr>
+                        <td colspan="5" class="loading">Loading IOC data...</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="last-updated">Last updated: <span id="ioc-timestamp">Loading...</span></div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize map centered on UAE
+        const map = L.map('map').setView([24.4539, 54.3773], 3);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Add UAE marker
+        const uaeMarker = L.marker([24.4539, 54.3773]).addTo(map);
+        uaeMarker.bindPopup("<b>UAE Oil & Gas Infrastructure</b><br>Critical infrastructure protection").openPopup();
+        
+        // Custom attack marker with pulse effect
+        const createAttackMarker = (latlng, info) => {
+            const html = `
+                <div class="attack-marker"></div>
+                <div class="attack-pulse"></div>
+            `;
+            
+            const icon = L.divIcon({
+                html: html,
+                className: 'attack-icon',
+                iconSize: [10, 10]
+            });
+            
+            const marker = L.marker(latlng, { icon: icon }).addTo(map);
+            if (info) {
+                marker.bindPopup(info);
+            }
+            
+            return marker;
+        };
+        
+        // Initialize attack chart
+        const attackCtx = document.getElementById('attackChart').getContext('2d');
+        const attackChart = new Chart(attackCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Attack Frequency',
+                    data: [],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)',
+                        'rgba(153, 102, 255, 0.7)',
+                        'rgba(255, 159, 64, 0.7)',
+                        'rgba(199, 199, 199, 0.7)',
+                        'rgba(83, 102, 255, 0.7)',
+                        'rgba(40, 159, 64, 0.7)',
+                        'rgba(210, 99, 132, 0.7)'
+                    ],
+                    borderColor: [
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 206, 86, 1)',
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(153, 102, 255, 1)',
+                        'rgba(255, 159, 64, 1)',
+                        'rgba(199, 199, 199, 1)',
+                        'rgba(83, 102, 255, 1)',
+                        'rgba(40, 159, 64, 1)',
+                        'rgba(210, 99, 132, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#e6f1ff'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#e6f1ff'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#e6f1ff'
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Helper function to format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toISOString().split('T')[0];
+        }
+        
+        // Helper function to determine severity class
+        function getSeverityClass(severity) {
+            severity = severity.toLowerCase();
+            if (severity === 'critical' || severity === 'high') return 'status-high';
+            if (severity === 'medium') return 'status-medium';
+            return 'status-low';
+        }
+        
+        // Helper function to update API status
+        function updateApiStatus(elementId, status, message = '') {
+            const element = document.getElementById(elementId);
+            element.textContent = status;
+            element.style.backgroundColor = status === 'Success' ? '#4dff4d33' : '#ff4d4d33';
+            if (message) {
+                console.error(`API Error (${elementId}):`, message);
+            }
+        }
+        
+        // Helper function to show loading state
+        function showLoadingState(elementId) {
+            document.getElementById(elementId).innerHTML = '<tr><td colspan="5" class="loading"><div class="loading-spinner"></div></td></tr>';
+        }
+        
+        // 1. Fetch real-time attack data from AbuseIPDB via our API proxy
+        async function fetchAbuseIPDBData() {
+            try {
+                const response = await fetch('/api/abuseipdb');
+                if (!response.ok) {
+                    throw new Error(`AbuseIPDB API error: ${response.status}`);
+                }
+                const data = await response.json();
+                updateApiStatus('map-api-status', 'Success');
+                return data.data || [];
+            } catch (error) {
+                updateApiStatus('map-api-status', 'Failed', error.message);
+                // For demo purposes, return some sample data
+                return getSampleAttackData();
+            }
+        }
+        
+        // 2. Fetch CVE data from NIST NVD API via our API proxy
+        async function fetchNVDData() {
+            try {
+                const response = await fetch('/api/nvd');
+                if (!response.ok) {
+                    throw new Error(`NVD API error: ${response.status}`);
+                }
+                const data = await response.json();
+                updateApiStatus('cve-api-status', 'Success');
+                return data.vulnerabilities || [];
+            } catch (error) {
+                updateApiStatus('cve-api-status', 'Failed', error.message);
+                // For demo purposes, return some sample data
+                return getSampleCVEData();
+            }
+        }
+        
+        // 3. Fetch threat intelligence from AlienVault OTX via our API proxy
+        async function fetchOTXData() {
+            try {
+                const response = await fetch('/api/otx');
+                if (!response.ok) {
+                    throw new Error(`OTX API error: ${response.status}`);
+                }
+                const data = await response.json();
+                updateApiStatus('ioc-api-status', 'Success');
+                updateApiStatus('chart-api-status', 'Success');
+                return data.results || [];
+            } catch (error) {
+                updateApiStatus('ioc-api-status', 'Failed', error.message);
+                updateApiStatus('chart-api-status', 'Failed', error.message);
+                // For demo purposes, return some sample data
+                return getSampleOTXData();
+            }
+        }
+        
+        // Process and display attack data on the map
+        async function updateAttackMap() {
+            try {
+                // Show loading state
+                document.getElementById('map-timestamp').textContent = 'Loading...';
+                updateApiStatus('map-api-status', 'Loading...');
+                
+                const attackData = await fetchAbuseIPDBData();
+                
+                // Clear existing attack markers
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker && layer !== uaeMarker) {
+                        map.removeLayer(layer);
+                    }
+                    if (layer instanceof L.Polyline) {
+                        map.removeLayer(layer);
+                    }
+                });
+                
+                // Add new attack markers
+                for (const attack of attackData) {
+                    // In a real implementation, you would use the IP geolocation data
+                    // For demo, we'll use random coordinates
+                    const lat = Math.random() * 180 - 90;
+                    const lng = Math.random() * 360 - 180;
+                    
+                    const info = `
+                        <b>Malicious IP:</b> ${attack.ipAddress || '192.168.x.x'}<br>
+                        <b>Country:</b> ${attack.countryCode || 'Unknown'}<br>
+                        <b>Confidence:</b> ${attack.abuseConfidenceScore || '95'}%<br>
+                        <b>Reports:</b> ${attack.totalReports || '42'}<br>
+                    `;
+                    
+                    createAttackMarker([lat, lng], info);
+                    
+                    // Draw line to UAE
+                    const target = { lat: 24.4539, lng: 54.3773 }; // UAE
+                    
+                    L.polyline([[lat, lng], [target.lat, target.lng]], {
+                        color: 'red',
+                        weight: 1,
+                        opacity: 0.5,
+                        dashArray: '5, 10'
+                    }).addTo(map);
+                }
+                
+                document.getElementById('map-timestamp').textContent = new Date().toLocaleString();
+            } catch (error) {
+                console.error('Error updating attack map:', error);
+                document.getElementById('map-timestamp').textContent = 'Error loading data';
+                updateApiStatus('map-api-status', 'Failed', error.message);
+            }
+        }
+        
+        // Process and display CVE data
+        async function updateCVETable() {
+            try {
+                // Show loading state
+                showLoadingState('cve-table');
+                document.getElementById('cve-timestamp').textContent = 'Loading...';
+                updateApiStatus('cve-api-status', 'Loading...');
+                
+                const cveData = await fetchNVDData();
+                const tableBody = document.getElementById('cve-table');
+                
+                if (!cveData.length) {
+                    tableBody.innerHTML = '<tr><td colspan="5" class="loading">No CVE data available</td></tr>';
+                    return;
+                }
+                
+                let tableHTML = '';
+                
+                for (const vuln of cveData) {
+                    const cve = vuln.cve;
+                    const cveId = cve.id;
+                    const description = cve.descriptions?.find(d => d.lang === 'en')?.value || 'No description available';
+                    const publishedDate = formatDate(cve.published);
+                    
+                    // Get severity from metrics
+                    let severity = 'Medium';
+                    let severityClass = 'status-medium';
+                    
+                    if (cve.metrics?.cvssMetricV31) {
+                        const metrics = cve.metrics.cvssMetricV31[0];
+                        severity = metrics.cvssData?.baseSeverity || 'Medium';
+                        severityClass = getSeverityClass(severity);
+                    }
+                    
+                    // Determine affected system based on description or configurations
+                    let affectedSystem = 'Industrial Control Systems';
+                    if (description.toLowerCase().includes('scada')) {
+                        affectedSystem = 'SCADA Systems';
+                    } else if (description.toLowerCase().includes('pipeline')) {
+                        affectedSystem = 'Pipeline Systems';
+                    } else if (description.toLowerCase().includes('hmi')) {
+                        affectedSystem = 'HMI Interfaces';
+                    }
+                    
+                    tableHTML += `
+                        <tr>
+                            <td>${cveId}</td>
+                            <td><span class="status-indicator ${severityClass}"></span>${severity}</td>
+                            <td>${affectedSystem}</td>
+                            <td>${description.substring(0, 100)}${description.length > 100 ? '...' : ''}</td>
+                            <td>${publishedDate}</td>
+                        </tr>
+                    `;
+                }
+                
+                tableBody.innerHTML = tableHTML;
+                document.getElementById('cve-timestamp').textContent = new Date().toLocaleString();
+            } catch (error) {
+                console.error('Error updating CVE table:', error);
+                document.getElementById('cve-table').innerHTML = `
+                    <tr>
+                        <td colspan="5" class="error-message">Error loading CVE data: ${error.message}</td>
+                    </tr>
+                `;
+                document.getElementById('cve-timestamp').textContent = 'Error loading data';
+                updateApiStatus('cve-api-status', 'Failed', error.message);
+            }
+        }
+        
+        // Process and display IOC data
+        async function updateIOCTable() {
+            try {
+                // Show loading state
+                showLoadingState('ioc-table');
+                document.getElementById('ioc-timestamp').textContent = 'Loading...';
+                updateApiStatus('ioc-api-status', 'Loading...');
+                
+                const otxData = await fetchOTXData();
+                const tableBody = document.getElementById('ioc-table');
+                
+                if (!otxData.length) {
+                    tableBody.innerHTML = '<tr><td colspan="5" class="loading">No IOC data available</td></tr>';
+                    return;
+                }
+                
+                // Extract indicators from pulses
+                const indicators = [];
+                
+                for (const pulse of otxData) {
+                    for (const indicator of pulse.indicators || []) {
+                        indicators.push({
+                            type: indicator.type,
+                            value: indicator.indicator,
+                            malwareFamily: pulse.name.split(' ')[0], // Extract first word as malware family
+                            firstSeen: formatDate(indicator.created),
+                            confidence: 'High' // OTX doesn't provide confidence scores directly
+                        });
+                        
+                        if (indicators.length >= 10) break; // Limit to 10 indicators
+                    }
+                    if (indicators.length >= 10) break;
+                }
+                
+                let tableHTML = '';
+                
+                for (const ioc of indicators) {
+                    // Sanitize and truncate the value if it's too long
+                    let displayValue = ioc.value;
+                    if (displayValue.length > 40) {
+                        displayValue = displayValue.substring(0, 37) + '...';
+                    }
+                    
+                    // Map indicator types to more readable formats
+                    let indicatorType = ioc.type;
+                    if (ioc.type === 'FileHash-SHA256') indicatorType = 'Hash (SHA-256)';
+                    if (ioc.type === 'FileHash-MD5') indicatorType = 'Hash (MD5)';
+                    if (ioc.type === 'hostname') indicatorType = 'Domain';
+                    if (ioc.type === 'URL') indicatorType = 'URL';
+                    if (ioc.type === 'IPv4') indicatorType = 'IP Address';
+                    
+                    tableHTML += `
+                        <tr>
+                            <td>${indicatorType}</td>
+                            <td>${displayValue}</td>
+                            <td>${ioc.malwareFamily}</td>
+                            <td>${ioc.firstSeen}</td>
+                            <td><span class="status-indicator status-high"></span>${ioc.confidence}</td>
+                        </tr>
+                    `;
+                }
+                
+                tableBody.innerHTML = tableHTML;
+                document.getElementById('ioc-timestamp').textContent = new Date().toLocaleString();
+            } catch (error) {
+                console.error('Error updating IOC table:', error);
+                document.getElementById('ioc-table').innerHTML = `
+                    <tr>
+                        <td colspan="5" class="error-message">Error loading IOC data: ${error.message}</td>
+                    </tr>
+                `;
+                document.getElementById('ioc-timestamp').textContent = 'Error loading data';
+                updateApiStatus('ioc-api-status', 'Failed', error.message);
+            }
+        }
+        
+        // Process and update attack types chart
+        async function updateAttackChart() {
+            try {
+                // Show loading state
+                document.getElementById('chart-timestamp').textContent = 'Loading...';
+                updateApiStatus('chart-api-status', 'Loading...');
+                
+                const otxData = await fetchOTXData();
+                
+                // Extract attack types from pulse tags
+                const attackTypes = {};
+                
+                for (const pulse of otxData) {
+                    for (const tag of pulse.tags || []) {
+                        // Filter for attack technique tags
+                        if (isAttackTechnique(tag)) {
+                            attackTypes[tag] = (attackTypes[tag] || 0) + 1;
+                        }
+                    }
+                }
+                
+                // Sort and get top 10
+                const sortedAttacks = Object.entries(attackTypes)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10);
+                
+                // Update chart data
+                attackChart.data.labels = sortedAttacks.map(item => item[0]);
+                attackChart.data.datasets[0].data = sortedAttacks.map(item => item[1]);
+                attackChart.update();
+                
+                document.getElementById('chart-timestamp').textContent = new Date().toLocaleString();
+            } catch (error) {
+                console.error('Error updating attack chart:', error);
+                document.getElementById('chart-timestamp').textContent = 'Error loading data';
+                updateApiStatus('chart-api-status', 'Failed', error.message);
+            }
+        }
+        
+        // Helper function to identify attack technique tags
+        function isAttackTechnique(tag) {
+            const attackTechniques = [
+                'phishing', 'malware', 'ransomware', 'ddos', 'sql injection',
+                'xss', 'zero-day', 'exploit', 'backdoor', 'trojan', 'spear phishing',
+                'credential stuffing', 'brute force', 'man-in-the-middle', 'supply chain',
+                'watering hole', 'social engineering', 'apt', 'lateral movement'
+            ];
+            
+            return attackTechniques.some(technique => 
+                tag.toLowerCase().includes(technique)
+            );
+        }
+        
+        // Export table to CSV
+        function exportTableToCSV(tableId, filename) {
+            const table = document.getElementById(tableId);
+            const rows = table.querySelectorAll('tr');
+            let csv = [];
+            
+            for (let i = 0; i < rows.length; i++) {
+                const row = [], cols = rows[i].querySelectorAll('td, th');
+                
+                for (let j = 0; j < cols.length; j++) {
+                    // Clean the text and wrap in quotes
+                    let text = cols[j].innerText;
+                    text = text.replace(/"/g, '""');
+                    row.push('"' + text + '"');
+                }
+                
+                csv.push(row.join(','));
+            }
+            
+            // Download CSV file
+            downloadCSV(csv.join('\n'), filename);
+        }
+        
+        function downloadCSV(csv, filename) {
+            const csvFile = new Blob([csv], {type: "text/csv"});
+            const downloadLink = document.createElement("a");
+            
+            downloadLink.download = filename;
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            downloadLink.style.display = "none";
+            
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+        
+        // Sample data generators for fallback when APIs fail
+        function getSampleAttackData() {
+            return Array(20).fill().map(() => ({
+                ipAddress: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+                countryCode: ['RU', 'CN', 'KP', 'IR', 'US', 'UK'][Math.floor(Math.random() * 6)],
+                abuseConfidenceScore: Math.floor(Math.random() * 30) + 70,
+                totalReports: Math.floor(Math.random() * 100) + 1
+            }));
+        }
+        
+        function getSampleCVEData() {
+            const cveIds = [
+                'CVE-2023-1234', 'CVE-2023-5678', 'CVE-2023-9012', 
+                'CVE-2023-3456', 'CVE-2023-7890', 'CVE-2023-2468',
+                'CVE-2023-1357', 'CVE-2023-8642', 'CVE-2023-9753',
+                'CVE-2023-4321'
+            ];
+            
+            const systems = [
+                'SCADA Control Systems', 'OPC UA Servers', 'Pipeline Monitoring Systems',
+                'HMI Interfaces', 'Refinery Control Systems', 'Oil Storage Monitoring',
+                'Gas Distribution Systems', 'Industrial Firewall', 'RTU Controllers',
+                'PLC Systems'
+            ];
+            
+            const descriptions = [
+                'Remote code execution vulnerability in industrial control systems',
+                'Authentication bypass in OPC UA implementation',
+                'Denial of service vulnerability affecting monitoring capabilities',
+                'Cross-site scripting vulnerability in operator interfaces',
+                'Buffer overflow allowing arbitrary code execution',
+                'Privilege escalation in control system authentication',
+                'Information disclosure in monitoring dashboard',
+                'Command injection in maintenance interface',
+                'Path traversal vulnerability in configuration system',
+                'SQL injection in reporting module'
+            ];
+            
+            return cveIds.map((id, index) => ({
+                cve: {
+                    id: id,
+                    descriptions: [{ lang: 'en', value: descriptions[index] }],
+                    published: new Date(Date.now() - Math.random() * 1000 * 60 * 60 * 24 * 14).toISOString(),
+                    metrics: {
+                        cvssMetricV31: [{
+                            cvssData: {
+                                baseSeverity: Math.random() > 0.7 ? 'CRITICAL' : Math.random() > 0.4 ? 'HIGH' : 'MEDIUM'
+                            }
+                        }]
+                    }
+                }
+            }));
+        }
+        
+        function getSampleOTXData() {
+            const pulseNames = [
+                'BlackEnergy Campaign Targeting Energy Sector',
+                'Industroyer2 Attacks on Industrial Systems',
+                'TritonRAT Targeting SCADA Systems',
+                'Stuxnet Variant Observed in Middle East',
+                'Shamoon Destructive Malware Campaign',
+                'DragonFly APT Targeting Energy Sector',
+                'Sandworm Team Activity in Oil & Gas',
+                'Lazarus Group Targeting Critical Infrastructure',
+                'APT33 Operations Against Energy Companies',
+                'Xenotime Activity Targeting Safety Systems'
+            ];
+            
+            const tags = [
+                ['malware', 'energy', 'apt', 'blackenergy', 'ukraine'],
+                ['industroyer', 'ics', 'scada', 'ukraine', 'destructive'],
+                ['triton', 'triconex', 'safety systems', 'middle east', 'sabotage'],
+                ['stuxnet', 'iran', 'centrifuge', 'zero-day', 'worm'],
+                ['shamoon', 'wiper', 'destructive', 'saudi arabia', 'disk wiper'],
+                ['dragonfly', 'energetic bear', 'havex', 'phishing', 'watering hole'],
+                ['sandworm', 'blackenergy', 'industroyer', 'ukraine', 'power grid'],
+                ['lazarus', 'north korea', 'wannacry', 'backdoor', 'ransomware'],
+                ['apt33', 'iran', 'shamoon', 'powerton', 'spear phishing'],
+                ['xenotime', 'triton', 'ics', 'safety systems', 'middle east']
+            ];
+            
+            const indicatorTypes = [
+                'FileHash-SHA256', 'FileHash-MD5', 'hostname', 'URL', 'IPv4'
+            ];
+            
+            const indicators = [
+                '8a9f08a6c37a5a07c25c5f8b788f9f5b9c9e2e4d3c2b1a0f9e8d7c6b5a4f3e2d',
+                '5e8f2a1b3c4d5e6f7a8b9c0d1e2f3a4b',
+                'update-service-uae.net',
+                'https://cdn-update-systems.com/scada/update.php',
+                '185.143.xx.xx'
+            ];
+            
+            return pulseNames.map((name, index) => ({
+                name: name,
+                tags: tags[index],
+                created: new Date(Date.now() - Math.random() * 1000 * 60 * 60 * 24 * 30).toISOString(),
+                indicators: Array(5).fill().map((_, i) => ({
+                    type: indicatorTypes[i % indicatorTypes.length],
+                    indicator: indicators[i % indicators.length],
+                    created: new Date(Date.now() - Math.random() * 1000 * 60 * 60 * 24 * 30).toISOString()
+                }))
+            }));
+        }
+        
+        // Initialize and update all components
+        async function initializeDashboard() {
+            // Initial data load
+            await Promise.all([
+                updateAttackMap(),
+                updateCVETable(),
+                updateIOCTable(),
+                updateAttackChart()
+            ]);
+            
+            // Set up refresh intervals - longer intervals to avoid hitting API rate limits
+            setInterval(updateAttackMap, 300000); // Refresh attack map every 5 minutes
+            setInterval(updateCVETable, 900000); // Refresh CVEs every 15 minutes
+            setInterval(updateIOCTable, 900000); // Refresh IOCs every 15 minutes
+            setInterval(updateAttackChart, 900000); // Refresh attack chart every 15 minutes
+        }
+        
+        // Start the dashboard
+        initializeDashboard();
+    </script>
+</body>
+</html>
