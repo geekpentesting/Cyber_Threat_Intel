@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UAE Oil & Gas Sector - Cyber Threat Intelligence Dashboard</title>
     
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Globe.GL for 3D Globe Visualization -->
+    <script src="https://unpkg.com/globe.gl"></script>
+    
+    <!-- Three.js for 3D rendering -->
+    <script src="https://unpkg.com/three"></script>
     
     <style>
         body {
@@ -42,18 +42,42 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         
-        .map-container {
+        .globe-container {
             grid-column: 1 / -1;
-            height: 500px;
+            height: 600px;
             background-color: #172a45;
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
         }
         
-        #map {
+        #globeViz {
+            width: 100%;
             height: 100%;
             border-radius: 4px;
+        }
+        
+        .globe-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(10, 25, 47, 0.7);
+            padding: 10px;
+            border-radius: 4px;
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        .globe-overlay h3 {
+            margin: 0 0 5px 0;
+            font-size: 14px;
+        }
+        
+        .globe-overlay p {
+            margin: 0;
+            font-size: 12px;
         }
         
         .chart-container {
@@ -75,10 +99,11 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 10px;
+            font-size: 0.85rem; /* Smaller font size for tables */
         }
         
         th, td {
-            padding: 12px;
+            padding: 8px; /* Reduced padding */
             text-align: left;
             border-bottom: 1px solid #0a192f;
         }
@@ -86,51 +111,17 @@
         th {
             background-color: #0a192f;
             color: #64ffda;
+            font-size: 0.85rem; /* Smaller font size for headers */
         }
         
         tr:hover {
             background-color: #1d3b5e;
         }
         
-        .attack-marker {
-            border-radius: 50%;
-            width: 10px;
-            height: 10px;
-            background-color: red;
-            opacity: 0.8;
-        }
-        
-        .attack-pulse {
-            border-radius: 50%;
-            height: 14px;
-            width: 14px;
-            position: absolute;
-            left: -7px;
-            top: -7px;
-            z-index: 2;
-            opacity: 0;
-            background: rgba(255, 0, 0, 0.5);
-            animation: pulse 2s ease-out infinite;
-        }
-        
-        @keyframes pulse {
-            0% {
-                transform: scale(0.1);
-                opacity: 0;
-            }
-            50% {
-                opacity: 0.7;
-            }
-            100% {
-                transform: scale(3);
-                opacity: 0;
-            }
-        }
-        
         .status-indicator {
             display: inline-block;
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             margin-right: 5px;
         }
@@ -149,6 +140,11 @@
         
         h1, h2, h3 {
             color: #64ffda;
+        }
+        
+        h2 {
+            font-size: 1.3rem;
+            margin-top: 0;
         }
         
         .last-updated {
@@ -246,6 +242,38 @@
             background-color: #1d3b5e;
         }
         
+        .attack-arc {
+            pointer-events: none;
+        }
+        
+        .attack-point {
+            pointer-events: none;
+        }
+        
+        /* Tooltip styles for globe */
+        .globe-tooltip {
+            position: absolute;
+            background-color: rgba(10, 25, 47, 0.9);
+            color: #e6f1ff;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 100;
+            max-width: 200px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            border: 1px solid #64ffda;
+        }
+        
+        .globe-tooltip h4 {
+            margin: 0 0 5px 0;
+            color: #64ffda;
+        }
+        
+        .globe-tooltip p {
+            margin: 3px 0;
+        }
+        
         /* Mobile responsiveness */
         @media (max-width: 768px) {
             .dashboard-container {
@@ -254,6 +282,18 @@
             
             .chart-container, .table-container {
                 grid-column: 1 / -1;
+            }
+            
+            .globe-container {
+                height: 400px;
+            }
+            
+            table {
+                font-size: 0.75rem;
+            }
+            
+            th, td {
+                padding: 6px;
             }
         }
     </style>
@@ -265,7 +305,7 @@
             <p>Real-time monitoring of cyber threats targeting critical infrastructure</p>
         </div>
         
-        <div class="map-container">
+        <div class="globe-container">
             <div class="controls">
                 <h2>Global Attack Map</h2>
                 <button onclick="updateAttackMap()" class="refresh-button">
@@ -277,7 +317,11 @@
                 <span>Data Source: AbuseIPDB + GreyNoise</span>
                 <span id="map-api-status">Loading...</span>
             </div>
-            <div id="map"></div>
+            <div id="globeViz"></div>
+            <div class="globe-overlay">
+                <h3>UAE Oil & Gas Infrastructure</h3>
+                <p>Monitoring cyber attacks in real-time</p>
+            </div>
             <div class="last-updated">Last updated: <span id="map-timestamp">Loading...</span></div>
         </div>
         
@@ -367,38 +411,82 @@
     </div>
 
     <script>
-        // Initialize map centered on UAE
-        const map = L.map('map').setView([24.4539, 54.3773], 3);
-        
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        // Initialize the 3D Globe
+        const globeElement = document.getElementById('globeViz');
+        const globe = Globe()
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+            .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+            .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+            .width(globeElement.clientWidth)
+            .height(globeElement.clientHeight)
+            .atmosphereColor('rgba(51, 153, 255, 0.7)')
+            .atmosphereAltitude(0.25)
+            .pointOfView({ lat: 25, lng: 55, altitude: 2.5 }) // Initial view centered near UAE
+            .arcColor(() => 'rgba(255, 65, 54, 0.7)')
+            .arcStroke(0.5)
+            .arcDashLength(0.4)
+            .arcDashGap(0.2)
+            .arcDashAnimateTime(1500)
+            .arcsTransitionDuration(1000)
+            .arcLabel(arc => `Attack from ${arc.sourceCountry} to UAE`)
+            .pointColor(() => 'rgba(255, 65, 54, 0.8)')
+            .pointAltitude(0.01)
+            .pointRadius(0.12)
+            .pointsMerge(true)
+            .pointsTransitionDuration(1000)
+            (globeElement);
         
         // Add UAE marker
-        const uaeMarker = L.marker([24.4539, 54.3773]).addTo(map);
-        uaeMarker.bindPopup("<b>UAE Oil & Gas Infrastructure</b><br>Critical infrastructure protection").openPopup();
+        const uaeCoordinates = { lat: 24.4539, lng: 54.3773 };
+        globe.pointsData([{
+            lat: uaeCoordinates.lat,
+            lng: uaeCoordinates.lng,
+            size: 0.2,
+            color: 'rgba(100, 255, 218, 1)',
+            label: 'UAE Oil & Gas Infrastructure'
+        }]);
         
-        // Custom attack marker with pulse effect
-        const createAttackMarker = (latlng, info) => {
-            const html = `
-                <div class="attack-marker"></div>
-                <div class="attack-pulse"></div>
-            `;
-            
-            const icon = L.divIcon({
-                html: html,
-                className: 'attack-icon',
-                iconSize: [10, 10]
+        // Auto-rotate the globe
+        let currentLng = 0;
+        setInterval(() => {
+            currentLng += 0.3;
+            globe.pointOfView({
+                lat: 25,
+                lng: currentLng,
+                altitude: 2.5
             });
-            
-            const marker = L.marker(latlng, { icon: icon }).addTo(map);
-            if (info) {
-                marker.bindPopup(info);
+        }, 100);
+        
+        // Create tooltip element for globe
+        const globeTooltip = document.createElement('div');
+        globeTooltip.className = 'globe-tooltip';
+        globeTooltip.style.display = 'none';
+        document.body.appendChild(globeTooltip);
+        
+        // Add tooltip event listeners
+        globe.onArcHover(arc => {
+            if (arc) {
+                const { sourceCountry, sourceLat, sourceLng, targetCountry } = arc;
+                globeTooltip.innerHTML = `
+                    <h4>Cyber Attack Detected</h4>
+                    <p><strong>Source:</strong> ${sourceCountry}</p>
+                    <p><strong>Target:</strong> ${targetCountry}</p>
+                    <p><strong>Type:</strong> Malicious Traffic</p>
+                `;
+                globeTooltip.style.display = 'block';
+                
+                // Position tooltip near mouse
+                document.addEventListener('mousemove', updateTooltipPosition);
+            } else {
+                globeTooltip.style.display = 'none';
+                document.removeEventListener('mousemove', updateTooltipPosition);
             }
-            
-            return marker;
-        };
+        });
+        
+        function updateTooltipPosition(event) {
+            globeTooltip.style.left = `${event.pageX + 10}px`;
+            globeTooltip.style.top = `${event.pageY + 10}px`;
+        }
         
         // Initialize attack chart
         const attackCtx = document.getElementById('attackChart').getContext('2d');
@@ -550,7 +638,7 @@
             }
         }
         
-        // Process and display attack data on the map
+        // Process and display attack data on the globe
         async function updateAttackMap() {
             try {
                 // Show loading state
@@ -559,42 +647,56 @@
                 
                 const attackData = await fetchAbuseIPDBData();
                 
-                // Clear existing attack markers
-                map.eachLayer(layer => {
-                    if (layer instanceof L.Marker && layer !== uaeMarker) {
-                        map.removeLayer(layer);
-                    }
-                    if (layer instanceof L.Polyline) {
-                        map.removeLayer(layer);
-                    }
+                // Prepare data for the globe
+                const arcs = [];
+                const points = [];
+                
+                // Add UAE as target
+                points.push({
+                    lat: uaeCoordinates.lat,
+                    lng: uaeCoordinates.lng,
+                    size: 0.2,
+                    color: 'rgba(100, 255, 218, 1)',
+                    label: 'UAE Oil & Gas Infrastructure'
                 });
                 
-                // Add new attack markers
+                // Process attack data
                 for (const attack of attackData) {
-                    // In a real implementation, you would use the IP geolocation data
-                    // For demo, we'll use random coordinates
+                    // Generate random coordinates or use real ones if available
                     const lat = Math.random() * 180 - 90;
                     const lng = Math.random() * 360 - 180;
                     
-                    const info = `
-                        <b>Malicious IP:</b> ${attack.ipAddress || '192.168.x.x'}<br>
-                        <b>Country:</b> ${attack.countryCode || 'Unknown'}<br>
-                        <b>Confidence:</b> ${attack.abuseConfidenceScore || '95'}%<br>
-                        <b>Reports:</b> ${attack.totalReports || '42'}<br>
-                    `;
+                    // Get country code or use a default
+                    const countryCode = attack.countryCode || 'Unknown';
                     
-                    createAttackMarker([lat, lng], info);
+                    // Add arc from attack source to UAE
+                    arcs.push({
+                        startLat: lat,
+                        startLng: lng,
+                        endLat: uaeCoordinates.lat,
+                        endLng: uaeCoordinates.lng,
+                        color: 'rgba(255, 65, 54, 0.7)',
+                        sourceCountry: countryCode,
+                        sourceLat: lat,
+                        sourceLng: lng,
+                        targetCountry: 'UAE',
+                        ipAddress: attack.ipAddress || '192.168.x.x',
+                        confidence: attack.abuseConfidenceScore || '95'
+                    });
                     
-                    // Draw line to UAE
-                    const target = { lat: 24.4539, lng: 54.3773 }; // UAE
-                    
-                    L.polyline([[lat, lng], [target.lat, target.lng]], {
-                        color: 'red',
-                        weight: 1,
-                        opacity: 0.5,
-                        dashArray: '5, 10'
-                    }).addTo(map);
+                    // Add point for attack source
+                    points.push({
+                        lat: lat,
+                        lng: lng,
+                        size: 0.1,
+                        color: 'rgba(255, 65, 54, 0.8)',
+                        label: `Attack from ${countryCode}`
+                    });
                 }
+                
+                // Update globe with new data
+                globe.arcsData(arcs);
+                globe.pointsData(points);
                 
                 document.getElementById('map-timestamp').textContent = new Date().toLocaleString();
             } catch (error) {
@@ -942,6 +1044,13 @@
                 }))
             }));
         }
+        
+        // Handle window resize for globe
+        window.addEventListener('resize', () => {
+            globe
+                .width(globeElement.clientWidth)
+                .height(globeElement.clientHeight);
+        });
         
         // Initialize and update all components
         async function initializeDashboard() {
